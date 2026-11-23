@@ -1,74 +1,177 @@
-# CRM (inspirado no Attio)
+# Attio-style CRM (self-hosted)
 
-CRM self-hosted com a cara e o jeito de usar do [Attio](https://attio.com): barra lateral, tabelas compactas com edição inline, Kanban de negócios, página de registro com atividade, notas e tarefas, e busca rápida com `Ctrl/Cmd + K`.
+[English](#english) · [Português](#português)
 
-Feito com Next.js 16 (App Router) + TypeScript + Tailwind 4 + Prisma 6 + PostgreSQL.
+---
 
-## Rodar com Docker (recomendado)
+## English
 
-Pré-requisito: Docker com Compose.
+A self-hosted CRM that mirrors [Attio](https://attio.com)'s look and workflow. It ships in **English (default) and Brazilian Portuguese**, and each user picks their language.
+
+Stack: Next.js 16 (App Router) · TypeScript · Tailwind 4 · Prisma 6 · PostgreSQL 17.
+
+### Run with Docker (recommended)
 
 ```bash
 docker compose up --build
 ```
 
-Abra http://localhost:3000 e entre com:
+Open http://localhost:3000 and sign in with **`jhonata@exemplo.com` / `attio123`**. The demo users `ana@exemplo.com` and `bruno@exemplo.com` use the same password and default to Portuguese.
 
-- **E-mail:** `jhonata@exemplo.com`
-- **Senha:** `attio123`
+- On start, the container runs `prisma migrate deploy` and then seeds demo data. The seed only runs once, when the database is empty.
+- Data lives in the `pgdata` volume and uploaded files in the `uploads` volume. To start from scratch: `docker compose down -v`.
+- For production, set a real secret: `AUTH_SECRET=a-long-random-string docker compose up -d --build`. Use `APP_PORT=8080` to change the port.
+- **Upgrading a v1 database** (created with `db push`): run `docker compose down -v` once, or baseline it with `npx prisma migrate resolve --applied 20261123190413_init`.
 
-Outros usuários de exemplo (mesma senha): `ana@exemplo.com`, `bruno@exemplo.com`.
+### Run without Docker
 
-Na primeira subida, o app cria as tabelas e popula dados de exemplo. Nas próximas, os dados ficam no volume `pgdata`. Para começar do zero: `docker compose down -v`.
-
-Para produção, defina um segredo próprio: `AUTH_SECRET=um-segredo-longo docker compose up -d --build`.
-
-## Rodar sem Docker
-
-Pré-requisitos: Node.js 20+ e um PostgreSQL rodando.
+You need Node.js 20+ and a running PostgreSQL.
 
 ```bash
-cp .env.example .env          # ajuste DATABASE_URL
+cp .env.example .env      # set DATABASE_URL
 npm install
-npm run db:push               # cria as tabelas
-npm run db:seed               # dados de exemplo
-npm run dev                   # http://localhost:3000
+npm run db:migrate        # prisma migrate deploy
+npm run db:seed           # demo data
+npm run dev               # http://localhost:3000
 ```
 
-Build de produção: `npm run build && npm start`.
-Zerar o banco e repopular: `npm run db:reset`.
-
-## O que tem
-
-| Área | O que faz |
+| Variable | Purpose |
 | --- | --- |
-| **Barra lateral** | Troca de workspace (menu com sair), Busca rápida, Tarefas, Notas, Registros (Empresas, Pessoas, Negócios) e Listas |
-| **Tabelas** | Edição inline em qualquer célula, ordenar, filtrar (contém, é, maior/menor que, vazio), adicionar coluna, excluir em lote, totais no rodapé |
-| **Atributos** | Texto, número, moeda (R$), data, seleção, status, usuário, relação com outro registro, e-mail, link e caixa de seleção |
-| **Kanban** | Negócios por etapa, arrastar e soltar entre colunas, soma do valor por coluna, criação rápida no fim da coluna |
-| **Registro** | Cabeçalho, abas Atividade / Notas / Tarefas, painel de atributos editável, registros relacionados (ex.: pessoas e negócios de uma empresa) |
-| **Tarefas** | Agrupadas por prazo (Atrasadas, Hoje, Amanhã, Próximos 7 dias…), concluir com um clique, responsável, prazo e registro vinculado |
-| **Notas** | Ligadas a um registro, com título e texto; visão geral em /notes |
-| **Listas** | Coleções de registros (ex.: “Pipeline Q4”) com a mesma tabela e Kanban |
-| **Busca rápida** | `Ctrl/Cmd + K` busca empresas, pessoas e negócios e navega pelo teclado |
-| **Login** | E-mail e senha (bcrypt + cookie JWT httpOnly), um único workspace |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `AUTH_SECRET` | Secret used to sign the session JWT |
+| `UPLOAD_DIR` | Where record files are stored (default `./uploads`) |
 
-## Estrutura
+### Features
 
+- **Shell**:
+  - Sidebar: workspace menu, search, inbox, Favorites, Records, Lists and Chats sections, the "Getting started" card, Invite members, and the trial bar.
+  - Top bar: Share, Help and Ask Attio.
+- **Home**: greeting, "Ask anything", Meetings, and your Tasks.
+- **Records (Companies, People, Deals)**:
+  - Table: sticky header and first column, inline edit, and per-column calculations (count, sum, average, …).
+  - Kanban: drag and drop between stages, and add new stages.
+- **Saved views**:
+  - Create, rename, duplicate and delete views, as table or kanban. Each view persists its own sorts, filters, columns, calculations, grouping and card fields.
+  - Multi-sort, reordered by drag and drop.
+  - Nested AND/OR filter groups.
+- **CSV import** with column mapping, and CSV export.
+- **Record page**:
+  - Left panel: details, "View all values" and lists.
+  - Tabs: Overview (Highlights), Activity, Emails, Calls, Team, Notes, Tasks, Files (upload and download), and relation tabs.
+- **Attribute types**:
+  - Text, number, currency (USD/BRL per attribute), date and timestamp.
+  - Checkbox, select and multi-select, status.
+  - Email, phone, domain, URL, location, personal name, user.
+  - Relations: one-to-many and many-to-many, with automatic inverse sync (Company ↔ Team, Deals ↔ Associated deals).
+- **Tasks, Notes, Inbox**:
+  - Tasks are grouped by due date (in the user's time zone).
+  - Notes support `@mentions`.
+  - The Inbox notifies you of task assignments and mentions.
+- **Reports**: dashboards with favorites and stats.
+- **Empty pages**: Emails, Calls, Sequences, Workflows and Chats show Attio-style empty states with line illustrations.
+- **Settings**:
+  - Profile and Appearance, both with a language picker.
+  - General, Members (invite), and Objects (Configuration and Attributes: create, rename, delete).
+  - Lists.
+- **Command palette and shortcuts**:
+  - `Ctrl/Cmd+K` opens the palette (record actions, quick actions, records, navigation). `/` also opens it.
+  - `G` then `H/T/N/E/R/I/S/C/P/D` jumps to a page.
+  - `N` creates a note and `T` creates a task.
+- **Internationalization**:
+  - The language is stored on the user (in the DB) and in a cookie.
+  - You can switch it from the workspace menu, Settings, the palette, or the login page.
+  - Dates and numbers use the active locale.
+
+### Tests
+
+```bash
+cd e2e && npm install
+BASE=http://localhost:3000 node e2e.mjs     # 21 browser scenarios; run it against a fresh, seeded database
 ```
-prisma/schema.prisma      modelo de dados (objetos, atributos, registros, notas, tarefas, listas, atividade)
-prisma/seed.mjs           dados de exemplo (só roda se o banco estiver vazio)
-src/app/(app)/            páginas logadas: tasks, notes, objects/[slug], objects/[slug]/[id], lists
-src/app/api/              rotas REST usadas pela interface
-src/components/           tabela/Kanban (object-view), registro, tarefas, notas, barra lateral, busca rápida
-src/proxy.ts              redireciona para /login sem sessão
+
+The script needs Chrome; set `CHROME_PATH` if it isn't at `/usr/bin/google-chrome`. Other checks: `npx tsc --noEmit`, `npm run lint`, `npm run build`.
+
+---
+
+## Português
+
+CRM self-hosted com a cara e o fluxo do [Attio](https://attio.com). A interface está em **inglês (padrão) e português do Brasil**, e cada usuário escolhe o seu idioma.
+
+Stack: Next.js 16 (App Router) · TypeScript · Tailwind 4 · Prisma 6 · PostgreSQL 17.
+
+### Rodar com Docker (recomendado)
+
+```bash
+docker compose up --build
 ```
 
-Os valores dos registros ficam em JSON (`Record.values`), indexados pelo `slug` do atributo. Assim dá para criar atributos novos pela interface sem migração.
+Abra http://localhost:3000 e entre com **`jhonata@exemplo.com` / `attio123`**. Os usuários de exemplo `ana@exemplo.com` e `bruno@exemplo.com` usam a mesma senha e já vêm em português.
 
-## Limites conhecidos
+- Ao subir, o container roda `prisma migrate deploy` e depois popula dados de exemplo. Isso só acontece uma vez, com o banco vazio.
+- Os dados ficam no volume `pgdata` e os arquivos enviados no volume `uploads`. Para começar do zero: `docker compose down -v`.
+- Em produção, defina um segredo: `AUTH_SECRET=um-segredo-longo docker compose up -d --build`. Use `APP_PORT=8080` para trocar a porta.
+- **Atualizando um banco da v1** (criado com `db push`): rode `docker compose down -v` uma vez, ou marque a migração inicial com `npx prisma migrate resolve --applied 20261123190413_init`.
 
-- Um workspace só; sem convite de usuários nem permissões.
-- Ordenação e filtros rodam no navegador e não ficam salvos como visualização.
-- Relação aceita um registro por atributo (não múltiplos).
-- Sem caixa de entrada de e-mail, sincronização de calendário ou enriquecimento automático.
+### Rodar sem Docker
+
+Você precisa de Node.js 20+ e de um PostgreSQL rodando.
+
+```bash
+cp .env.example .env      # ajuste DATABASE_URL
+npm install
+npm run db:migrate        # prisma migrate deploy
+npm run db:seed           # dados de exemplo
+npm run dev               # http://localhost:3000
+```
+
+Variáveis: `DATABASE_URL` (PostgreSQL), `AUTH_SECRET` (assinatura da sessão) e `UPLOAD_DIR` (pasta dos arquivos, padrão `./uploads`).
+
+### Funcionalidades
+
+- **Estrutura**:
+  - Barra lateral: menu do workspace, busca, caixa de entrada, seções Favoritos, Registros, Listas e Chats, o cartão "Primeiros passos", Convidar membros e a barra de teste.
+  - Barra superior: Compartilhar, Ajuda e Pergunte ao Attio.
+- **Início**: saudação, "Pergunte qualquer coisa", Reuniões e as suas tarefas.
+- **Registros (Empresas, Pessoas, Negócios)**:
+  - Tabela: cabeçalho e primeira coluna fixos, edição inline e cálculos por coluna.
+  - Kanban: arrastar e soltar entre etapas e criar novas etapas.
+- **Visualizações salvas**:
+  - Criar, renomear, duplicar e excluir visualizações, em tabela ou kanban. Cada uma guarda suas ordenações, filtros, colunas, cálculos, agrupamento e campos do cartão.
+  - Várias ordenações, reordenadas arrastando.
+  - Grupos de filtros E/OU aninhados.
+- **Importação de CSV** com mapeamento de colunas, e exportação em CSV.
+- **Página do registro**:
+  - Painel esquerdo: detalhes, "Ver todos os valores" e listas.
+  - Abas: Visão geral (Destaques), Atividade, E-mails, Ligações, Equipe, Notas, Tarefas, Arquivos (upload e download) e abas de relação.
+- **Tipos de atributo**:
+  - Texto, número, moeda (USD/BRL por atributo), data e data e hora.
+  - Caixa de seleção, seleção e seleção múltipla, status.
+  - E-mail, telefone, domínio, URL, localização, nome pessoal, usuário.
+  - Relações: um-para-muitos e muitos-para-muitos, com o lado inverso sincronizado automaticamente.
+- **Tarefas, Notas, Caixa de entrada**:
+  - As tarefas são agrupadas por prazo, no fuso horário do usuário.
+  - As notas aceitam `@menções`.
+  - A caixa de entrada avisa sobre tarefas atribuídas a você e menções.
+- **Relatórios**: dashboards com favoritos e indicadores.
+- **Páginas vazias**: E-mails, Ligações, Sequências, Workflows e Chats mostram estados vazios no estilo do Attio, com ilustrações em traço.
+- **Configurações**:
+  - Perfil e Aparência, ambas com seletor de idioma.
+  - Geral, Membros (convite) e Objetos (Configuração e Atributos: criar, renomear, excluir).
+  - Listas.
+- **Paleta de comandos e atalhos**:
+  - `Ctrl/Cmd+K` abre a paleta. `/` também abre.
+  - `G` e depois `H/T/N/E/R/I/S/C/P/D` navega entre as páginas.
+  - `N` cria uma nota e `T` cria uma tarefa.
+- **Idiomas**:
+  - O idioma fica salvo no usuário (no banco) e num cookie.
+  - Dá para trocar pelo menu do workspace, pelas Configurações, pela paleta ou pela tela de login.
+  - Datas e valores seguem o idioma ativo.
+
+### Testes
+
+```bash
+cd e2e && npm install
+BASE=http://localhost:3000 node e2e.mjs     # 21 cenários no navegador; rode contra um banco novo, com seed
+```
+
+O script precisa do Chrome; defina `CHROME_PATH` se ele não estiver em `/usr/bin/google-chrome`. Outras checagens: `npx tsc --noEmit`, `npm run lint` e `npm run build`.

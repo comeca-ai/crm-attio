@@ -24,8 +24,12 @@ services:
       DATABASE_URL: postgresql://crm:crm@db:5432/crm?schema=public
       AUTH_SECRET: ${AUTH_SECRET:-troque-este-segredo-em-producao}
       PORT: 3000
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     ports:
       - "${APP_PORT:-3000}:3000"
 
 volumes:
   pgdata:
+  uploads:

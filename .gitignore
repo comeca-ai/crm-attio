@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# file uploads (local dev)
+/uploads
+/e2e/node_modules
+/e2e/output
