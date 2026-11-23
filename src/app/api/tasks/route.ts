@@ -1,28 +1,23 @@
 import { prisma } from "@/lib/db";
-import { apiUser } from "@/lib/auth";
-import { bad, json, unauthorized } from "@/lib/api";
+import { err, json, withUser } from "@/lib/api";
 import { logActivity } from "@/lib/data";
 
 export async function GET() {
-  if (!(await apiUser())) return unauthorized();
-  return json(await prisma.task.findMany({ orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }] }));
+  return withUser(async () => json(await prisma.task.findMany({ orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }] })));
 }
 
 export async function POST(req: Request) {
-  const user = await apiUser();
-  if (!user) return unauthorized();
-  const b = await req.json().catch(() => ({}));
-  const content = String(b.content ?? "").trim();
-  if (!content) return bad("Escreva a tarefa.");
-  const t = await prisma.task.create({
-    data: {
-      content,
-      dueDate: b.dueDate ? new Date(b.dueDate) : null,
-      assigneeId: b.assigneeId || null,
-      recordId: b.recordId || null,
-      creatorId: user.id,
-    },
+  return withUser(async (user) => {
+    const b = await req.json().catch(() => ({}));
+    const content = String(b.content ?? "").trim();
+    if (!content) return err("tasks.required");
+    const t = await prisma.task.create({
+      data: { content, dueDate: b.dueDate ? new Date(b.dueDate) : null, assigneeId: b.assigneeId || null, recordId: b.recordId || null, creatorId: user.id },
+    });
+    if (t.recordId) await logActivity(t.recordId, user.id, "task_created", { content });
+    if (t.assigneeId && t.assigneeId !== user.id) {
+      await prisma.notification.create({ data: { userId: t.assigneeId, actorId: user.id, kind: "task_assigned", data: { taskId: t.id, content, recordId: t.recordId } } });
+    }
+    return json(t, 201);
   });
-  if (t.recordId) await logActivity(t.recordId, user.id, "task", `criou a tarefa “${content}”`);
-  return json(t, 201);
 }
