@@ -8,18 +8,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
-  name         String
+  firstName    String
+  lastName     String   @default("")
   passwordHash String
   avatarColor  String   @default("#6366f1")
+  locale       String   @default("en")
+  timezone     String   @default("America/Fortaleza")
+  weekStart    String   @default("monday")
   createdAt    DateTime @default(now())
 
   notes         Note[]
-  tasksAssigned Task[]     @relation("assignee")
-  tasksCreated  Task[]     @relation("creator")
+  tasksAssigned Task[]         @relation("assignee")
+  tasksCreated  Task[]         @relation("creator")
   activities    Activity[]
+  favorites     Favorite[]
+  notifications Notification[] @relation("recipient")
+  sent          Notification[] @relation("actor")
+  records       Record[]
+  files         File[]
 }
 
 model ObjectType {
@@ -27,6 +42,8 @@ model ObjectType {
   slug      String   @unique
   singular  String
   plural    String
+  /// Chave de tradução para objetos padrão (ex.: "companies"); null quando renomeado
+  nameKey   String?
   icon      String
   color     String   @default("#3b82f6")
   order     Int      @default(0)
@@ -35,17 +52,23 @@ model ObjectType {
   attributes Attribute[]
   records    Record[]
   lists      List[]
+  views      View[]
 }
 
-/// type: text | number | currency | date | select | status | user | relation | email | url | checkbox
+/// type: text | number | currency | date | timestamp | select | multiselect | status | user | relation
+///       | email | url | domain | phone | location | personal-name | checkbox
 model Attribute {
   id               String     @id @default(cuid())
   objectId         String
   object           ObjectType @relation(fields: [objectId], references: [id], onDelete: Cascade)
   slug             String
   name             String
+  /// Chave de tradução para atributos padrão; null quando o usuário renomeia
+  nameKey          String?
   type             String
   options          Json?
+  /// { multiple?: boolean, inverseAttrId?: string, currency?: "USD" | "BRL", readOnly?: boolean }
+  config           Json?
   relationObjectId String?
   isPrimary        Boolean    @default(false)
   isSystem         Boolean    @default(false)
@@ -56,19 +79,41 @@ model Attribute {
 }
 
 model Record {
-  id        String     @id @default(cuid())
-  objectId  String
-  object    ObjectType @relation(fields: [objectId], references: [id], onDelete: Cascade)
-  values    Json       @default("{}")
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id          String     @id @default(cuid())
+  objectId    String
+  object      ObjectType @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  values      Json       @default("{}")
+  createdById String?
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   notes       Note[]
   tasks       Task[]
   activities  Activity[]
   listEntries ListEntry[]
+  favorites   Favorite[]
+  files       File[]
 
   @@index([objectId])
+}
+
+model View {
+  id        String     @id @default(cuid())
+  objectId  String
+  object    ObjectType @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  listId    String?
+  list      List?      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  name      String
+  nameKey   String?
+  /// table | kanban
+  type      String     @default("table")
+  /// { sorts, filter, columns, calcs, groupBy }
+  config    Json       @default("{}")
+  order     Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  @@index([objectId, listId])
 }
 
 model Note {
@@ -99,6 +144,7 @@ model Task {
   updatedAt   DateTime  @updatedAt
 }
 
+/// kind: created | updated | note | task_created | task_completed | task_reopened | file
 model Activity {
   id        String   @id @default(cuid())
   recordId  String
@@ -106,7 +152,7 @@ model Activity {
   actorId   String?
   actor     User?    @relation(fields: [actorId], references: [id])
   kind      String
-  message   String
+  data      Json     @default("{}")
   createdAt DateTime @default(now())
 }
 
@@ -117,6 +163,7 @@ model List {
   object    ObjectType  @relation(fields: [objectId], references: [id], onDelete: Cascade)
   createdAt DateTime    @default(now())
   entries   ListEntry[]
+  views     View[]
 }
 
 model ListEntry {
@@ -128,4 +175,50 @@ model ListEntry {
   createdAt DateTime @default(now())
 
   @@unique([listId, recordId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordId  String
+  record    Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, recordId])
+}
+
+/// kind: task_assigned | mention
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("recipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?    @relation("actor", fields: [actorId], references: [id], onDelete: SetNull)
+  kind      String
+  data      Json     @default("{}")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model File {
+  id         String   @id @default(cuid())
+  recordId   String
+  record     Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  name       String
+  size       Int
+  mime       String
+  path       String
+  uploaderId String
+  uploader   User     @relation(fields: [uploaderId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model Dashboard {
+  id        String   @id @default(cuid())
+  name      String
+  favorite  Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
