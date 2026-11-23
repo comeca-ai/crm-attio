@@ -1,12 +1,7 @@
-import { BarChart3 } from "lucide-react";
-import { PageHeader } from "@/components/ui";
-import { EmptyState } from "@/components/empty-state";
+import { prisma } from "@/lib/db";
+import { ReportsPage } from "@/components/simple-pages";
 
-export default function Page() {
-  return (
-    <>
-      <PageHeader title="Relatórios" icon={<BarChart3 size={15} className="text-ink-2" />} />
-      <EmptyState kind="chart" title="Relatórios" text="Acompanhe o funil e as metas do time com relatórios. Em breve neste CRM." />
-    </>
-  );
+export default async function Page() {
+  const dashboards = await prisma.dashboard.findMany({ orderBy: { createdAt: "desc" } });
+  return <ReportsPage dashboards={dashboards.map((d) => ({ id: d.id, name: d.name, favorite: d.favorite, createdAt: d.createdAt.toISOString(), reports: 4 }))} />;
 }

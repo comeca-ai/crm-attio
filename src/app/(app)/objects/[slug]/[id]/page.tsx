@@ -1,48 +1,50 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getObjectWithAttrs, toAttr, toRecord } from "@/lib/data";
-import { recordName } from "@/lib/format";
-import { RecordView, type RelatedGroup } from "@/components/record-view";
+import { requireUser } from "@/lib/auth";
+import { getObjectWithAttrs, toAttr, toRecord, localizeObject } from "@/lib/data";
+import { getLocale } from "@/i18n/server";
+import { RecordView } from "@/components/record-view";
+import { serializeNote, serializeTask } from "@/lib/serialize";
+import { asArray } from "@/lib/format";
 
 export default async function RecordPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params;
-  const data = await getObjectWithAttrs(slug);
+  const me = await requireUser();
+  const locale = await getLocale();
+  const data = await getObjectWithAttrs(slug, locale);
   if (!data) notFound();
   const rec = await prisma.record.findUnique({ where: { id } });
   if (!rec || rec.objectId !== data.object.id) notFound();
-
-  const [notes, tasks, activities] = await Promise.all([
-    prisma.note.findMany({ where: { recordId: id }, orderBy: { updatedAt: "desc" } }),
-    prisma.task.findMany({ where: { recordId: id }, orderBy: [{ completed: "asc" }, { dueDate: "asc" }] }),
-    prisma.activity.findMany({ where: { recordId: id }, orderBy: { createdAt: "desc" }, take: 100 }),
+  const values = rec.values as Record<string, unknown>;
+  const [notes, tasks, activities, files, entries, fav, objs] = await Promise.all([
+    prisma.note.findMany({ where: { recordId: id }, orderBy: { createdAt: "desc" } }),
+    prisma.task.findMany({ where: { recordId: id }, orderBy: [{ dueDate: "asc" }] }),
+    prisma.activity.findMany({ where: { recordId: id }, orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.file.findMany({ where: { recordId: id }, orderBy: { createdAt: "desc" } }),
+    prisma.listEntry.findMany({ where: { recordId: id }, include: { list: true } }),
+    prisma.favorite.findUnique({ where: { userId_recordId: { userId: me.id, recordId: id } } }),
+    prisma.objectType.findMany({ include: { attributes: { orderBy: { order: "asc" } } } }),
   ]);
-
-  // Relações reversas: registros de outros objetos que apontam para este
-  const relAttrs = await prisma.attribute.findMany({ where: { type: "relation", relationObjectId: data.object.id }, include: { object: { include: { attributes: true } } } });
-  const related: RelatedGroup[] = [];
-  for (const ra of relAttrs) {
-    const recs = await prisma.record.findMany({ where: { objectId: ra.objectId, values: { path: [ra.slug], equals: id } } });
-    if (recs.length === 0) continue;
-    const oattrs = ra.object.attributes.map(toAttr);
-    const { id: oid, slug: oslug, singular, plural, icon, color } = ra.object;
-    const label = oslug === "deals" ? "Negócios associados" : oslug === "people" ? "Equipe" : plural;
-    related.push({ object: { id: oid, slug: oslug, singular, plural, icon, color }, attrName: ra.name, label, records: recs.map((r) => ({ id: r.id, name: recordName(r.values as Record<string, unknown>, oattrs) })) });
-  }
-
-  const entries = await prisma.listEntry.findMany({ where: { recordId: id }, include: { list: true } });
-  const iso = (d: Date | null) => (d ? d.toISOString() : null);
-  const { id: oid, singular, plural, icon, color } = data.object;
+  // Abas de relação: atributos com vários valores (Team, Associated deals…)
+  const relAttrs = data.attrs.filter((a) => a.type === "relation" && a.config.multiple);
+  const relationTabs = await Promise.all(relAttrs.map(async (a) => {
+    const o = objs.find((x) => x.id === a.relationObjectId)!;
+    const rs = await prisma.record.findMany({ where: { id: { in: asArray(values[a.slug]) } } });
+    return { attr: a, object: localizeObject(o, locale), attrs: o.attributes.map((x) => toAttr(x, locale)), records: rs.map(toRecord) };
+  }));
   return (
     <RecordView
       key={id}
-      object={{ id: oid, slug, singular, plural, icon, color }}
+      object={data.object}
       attrs={data.attrs}
       record={toRecord(rec)}
-      notes={notes.map((n) => ({ id: n.id, recordId: n.recordId, title: n.title, content: n.content, authorId: n.authorId, createdAt: n.createdAt.toISOString(), updatedAt: n.updatedAt.toISOString() }))}
-      tasks={tasks.map((t) => ({ id: t.id, content: t.content, dueDate: iso(t.dueDate), completed: t.completed, completedAt: iso(t.completedAt), assigneeId: t.assigneeId, recordId: t.recordId, createdAt: t.createdAt.toISOString() }))}
-      activities={activities.map((a) => ({ id: a.id, kind: a.kind, message: a.message, actorId: a.actorId, createdAt: a.createdAt.toISOString() }))}
-      related={related}
-      listNames={entries.map((e) => e.list.name)}
+      notes={notes.map(serializeNote)}
+      tasks={tasks.map(serializeTask)}
+      activities={activities.map((a) => ({ id: a.id, kind: a.kind, data: (a.data ?? {}) as Record<string, unknown>, actorId: a.actorId, createdAt: a.createdAt.toISOString() }))}
+      files={files.map((f) => ({ id: f.id, name: f.name, size: f.size, mime: f.mime, uploaderId: f.uploaderId, createdAt: f.createdAt.toISOString() }))}
+      relationTabs={relationTabs}
+      memberLists={entries.map((e) => ({ id: e.list.id, name: e.list.name }))}
+      favorite={!!fav}
     />
   );
 }

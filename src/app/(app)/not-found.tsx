@@ -1,9 +1,12 @@
 import Link from "next/link";
-export default function NotFound() {
+import { getT } from "@/i18n/server";
+
+export default async function NotFound() {
+  const { t } = await getT();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2">
-      <p className="text-[15px] font-semibold">Página não encontrada</p>
-      <Link href="/tasks" className="text-[13px] text-[#266df0] hover:underline">Voltar para Tarefas</Link>
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+      <p className="text-[15px] font-semibold">{t("api.notFound", { what: "Page" })}</p>
+      <Link href="/home" className="text-[13px] text-[#266df0] hover:underline">{t("nav.home")}</Link>
     </div>
   );
 }

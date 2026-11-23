@@ -1,92 +1,68 @@
 "use client";
+import { useState } from "react";
+import { hourIn, safeTz } from "@/lib/time";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useSyncExternalStore, useState } from "react";
-import clsx from "clsx";
-import { Calendar, Check, Search } from "lucide-react";
-import { greeting } from "@/lib/labels";
-import { relativeTime } from "@/lib/format";
+import { ChevronLeft, ChevronRight, EllipsisVertical, Mic, ArrowUp } from "lucide-react";
+import { useI18n } from "@/i18n/client";
 import { useCrm } from "./crm-context";
-import { Avatar, api } from "./ui";
-import { dueLabel, TaskModal, type TaskLite } from "./tasks";
+import { Button, api } from "./ui";
+import { TaskRow, TaskModal, type TaskLite } from "./tasks";
+import { TopBar, Crumb } from "./topbar";
+import { House } from "lucide-react";
+import { GoogleIcon } from "./ui";
 
-const noop = () => () => {};
 
-export function HomeView({ name, tasks, activities }: { name: string; tasks: TaskLite[]; activities: { id: string; kind: string; message: string; actorId: string | null; createdAt: string; recordId: string }[] }) {
+export function HomeView({ tasks }: { tasks: TaskLite[] }) {
+  const { t, locale } = useI18n();
+  const { me } = useCrm();
   const router = useRouter();
-  const { users, relIndex } = useCrm();
-  // Saudação pelo relógio de quem está usando (evita fuso do servidor)
-  const hello = useSyncExternalStore(noop, () => greeting(), () => "Olá");
-  const [newTask, setNewTask] = useState(false);
-  const [done, setDone] = useState<Set<string>>(new Set());
-
-  const complete = async (t: TaskLite) => {
-    setDone(new Set(done).add(t.id));
-    await api(`/api/tasks/${t.id}`, "PATCH", { completed: true });
-    router.refresh();
-  };
-
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState<TaskLite | null>(null);
+  const h = hourIn(me.timezone);
+  const greet = h < 12 ? "home.greeting.morning" : h < 18 ? "home.greeting.afternoon" : "home.greeting.evening";
+  const today = new Date().toLocaleDateString(locale === "pt-BR" ? "pt-BR" : "en-US", { month: "short", day: "numeric", timeZone: safeTz(me.timezone) });
+  const mine = tasks.filter((x) => !x.completed && x.assigneeId === me.id).slice(0, 6);
   return (
-    <div className="scroll-thin flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-[640px] px-6 py-10">
-        <h1 className="text-[20px] font-semibold tracking-[-0.01em]">{hello}, {name}.</h1>
-        <button onClick={() => window.dispatchEvent(new Event("open-palette"))} className="mt-4 flex h-11 w-full items-center gap-2 rounded-xl border border-line-2 px-3.5 text-left text-[14px] text-ink-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-[#d0d2d7]">
-          <Search size={15} /> Buscar registros ou criar algo novo…
-          <kbd className="ml-auto font-sans text-[11px] tracking-wide">CTRL K</kbd>
-        </button>
-
-        <section className="mt-10">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-[13px] font-medium text-ink-2">Minhas tarefas</h2>
-            <div className="flex gap-3 text-[12.5px]">
-              <button onClick={() => setNewTask(true)} className="text-ink-2 hover:text-ink">Nova tarefa</button>
-              <Link href="/tasks" className="text-ink-2 hover:text-ink">Ver todas</Link>
+    <>
+      <TopBar variant="help"><Crumb icon={<House size={14} className="text-ink-2" />}>{t("nav.home")}</Crumb></TopBar>
+      <div className="scroll-thin flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[640px] px-4 pb-16 pt-[44px]">
+          <h1 className="px-1 text-[19px] font-semibold tracking-[-0.01em]" data-testid="greeting">{t(greet, { name: me.name })}</h1>
+          <form onSubmit={(e) => { e.preventDefault(); router.push(`/chats?q=${encodeURIComponent(q)}`); }} className="mt-4 rounded-xl border border-[#dfe8fb] bg-white p-2.5 shadow-[0_0_0_3px_#f4f7fe]">
+            <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("home.ask")} rows={2} className="w-full resize-none bg-transparent px-1 text-[13.5px] outline-none placeholder:text-ink-3" />
+            <div className="flex items-center justify-end gap-2">
+              <span className="text-[12.5px] text-ink-2">{t("home.auto")}</span>
+              <span className="h-5 w-6 rounded-md bg-[#f1f1f3]" />
+              <button type="submit" className="flex h-6 w-6 items-center justify-center rounded-md bg-[#266df0] text-white" aria-label={t("home.ask")}>{q ? <ArrowUp size={13} /> : <Mic size={13} />}</button>
             </div>
-          </div>
-          {tasks.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-line-2 px-4 py-6 text-center text-[13px] text-ink-3">Nenhuma tarefa pendente. Bom trabalho!</p>
-          ) : (
-            <div className="divide-y divide-line rounded-xl border border-line-2">
-              {tasks.map((t) => {
-                const rec = t.recordId ? relIndex[t.recordId] : null;
-                const isDone = done.has(t.id);
-                const overdue = t.dueDate && new Date(t.dueDate) < new Date(new Date().setHours(0, 0, 0, 0));
-                return (
-                  <div key={t.id} className="flex h-10 items-center gap-3 px-3">
-                    <button onClick={() => complete(t)} aria-label="Concluir tarefa" className={clsx("flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-[1.5px]", isDone ? "border-[#266df0] bg-[#266df0] text-white" : "border-[#c4c6cc] hover:border-[#266df0]")}>
-                      {isDone && <Check size={10} strokeWidth={3} />}
-                    </button>
-                    <span className={clsx("min-w-0 flex-1 truncate text-[13.5px]", isDone && "text-ink-3 line-through")}>{t.content}</span>
-                    {rec && <Link href={`/objects/${rec.objectSlug}/${t.recordId}`} className="max-w-[160px] truncate rounded-md border border-line-2 px-1.5 text-[12px] text-ink-2 hover:bg-hover">{rec.name}</Link>}
-                    {t.dueDate && <span className={clsx("flex items-center gap-1 text-[12px]", overdue ? "text-red-600" : "text-ink-3")}><Calendar size={11} />{dueLabel(t.dueDate)}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+          </form>
 
-        <section className="mt-10">
-          <h2 className="mb-2 text-[13px] font-medium text-ink-2">Atividade recente</h2>
-          <div className="space-y-2.5">
-            {activities.map((a) => {
-              const u = users.find((x) => x.id === a.actorId);
-              const rec = relIndex[a.recordId];
-              return (
-                <div key={a.id} className="flex items-center gap-2 text-[13px]">
-                  {u && <Avatar name={u.name} color={u.avatarColor} size={18} />}
-                  <span className="min-w-0 flex-1 truncate">
-                    <b className="font-medium">{u?.name ?? "Sistema"}</b> <span className="text-ink-2">{a.message}</span>
-                    {rec && <> <span className="text-ink-3">em</span> <Link href={`/objects/${rec.objectSlug}/${a.recordId}`} className="font-medium hover:underline">{rec.name}</Link></>}
-                  </span>
-                  <span className="shrink-0 text-[12px] text-ink-3">{relativeTime(a.createdAt)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+          <section className="mt-9">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-[13px] font-medium text-ink-2">{t("home.meetings")}</h2>
+              <div className="flex items-center gap-1 text-[12px] text-ink-2"><span>{t("common.today")}, {today}</span><ChevronLeft size={13} /><ChevronRight size={13} /><EllipsisVertical size={13} /></div>
+            </div>
+            <div className="py-6 text-center">
+              <p className="text-[13.5px] font-medium">{t("home.meetings.title")}</p>
+              <p className="mt-0.5 text-[12.5px] text-ink-2">{t("home.meetings.text")}</p>
+              <Link href="/settings/email-calendar-accounts"><Button className="mt-2.5 h-7 px-2"><GoogleIcon />{t("home.meetings.sync")}</Button></Link>
+            </div>
+          </section>
+
+          <section className="mt-6">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-[13px] font-medium text-ink-2">{t("home.tasks")}</h2>
+              <Link href="/tasks" className="text-[12px] text-ink-2 hover:text-ink">{t("common.viewAll")}</Link>
+            </div>
+            <div className="mt-1.5 [&>div]:border-b-0 [&>div]:px-1" data-testid="home-tasks">
+              {mine.length === 0 && <p className="px-1 py-4 text-[13px] text-ink-3">{t("home.tasks.empty")}</p>}
+              {mine.map((x) => <TaskRow key={x.id} task={x} onOpen={() => setOpen(x)} onToggle={async () => { await api(`/api/tasks/${x.id}`, "PATCH", { completed: true }); router.refresh(); }} />)}
+            </div>
+          </section>
+        </div>
       </div>
-      {newTask && <TaskModal task={null} onClose={() => setNewTask(false)} />}
-    </div>
+      {open && <TaskModal task={open} onClose={() => setOpen(null)} />}
+    </>
   );
 }
