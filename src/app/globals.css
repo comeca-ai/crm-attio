@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #1c1d1f;
+  --color-ink-2: #5c5e63;
+  --color-ink-3: #8a8d93;
+  --color-line: #eeeff1;
+  --color-line-2: #e3e4e8;
+  --color-panel: #fbfbfb;
+  --color-hover: #f4f5f6;
+  --color-accent: #266df0;
+}
+
+html, body { height: 100%; }
+body {
+  background: #fff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+* { border-color: var(--color-line); }
+::selection { background: #dbe6fd; }
+input, textarea, select, button { font: inherit; color: inherit; }
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: #e3e4e8; border-radius: 8px; }
+.focus-ring:focus { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #c6d8fc; }

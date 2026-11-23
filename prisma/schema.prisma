@@ -1,0 +1,131 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  avatarColor  String   @default("#6366f1")
+  createdAt    DateTime @default(now())
+
+  notes         Note[]
+  tasksAssigned Task[]     @relation("assignee")
+  tasksCreated  Task[]     @relation("creator")
+  activities    Activity[]
+}
+
+model ObjectType {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  singular  String
+  plural    String
+  icon      String
+  color     String   @default("#3b82f6")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  attributes Attribute[]
+  records    Record[]
+  lists      List[]
+}
+
+/// type: text | number | currency | date | select | status | user | relation | email | url | checkbox
+model Attribute {
+  id               String     @id @default(cuid())
+  objectId         String
+  object           ObjectType @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  slug             String
+  name             String
+  type             String
+  options          Json?
+  relationObjectId String?
+  isPrimary        Boolean    @default(false)
+  isSystem         Boolean    @default(false)
+  order            Int        @default(0)
+  createdAt        DateTime   @default(now())
+
+  @@unique([objectId, slug])
+}
+
+model Record {
+  id        String     @id @default(cuid())
+  objectId  String
+  object    ObjectType @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  values    Json       @default("{}")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  notes       Note[]
+  tasks       Task[]
+  activities  Activity[]
+  listEntries ListEntry[]
+
+  @@index([objectId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  recordId  String
+  record    Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  title     String
+  content   String   @default("")
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  content     String
+  dueDate     DateTime?
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  assigneeId  String?
+  assignee    User?     @relation("assignee", fields: [assigneeId], references: [id])
+  recordId    String?
+  record      Record?   @relation(fields: [recordId], references: [id], onDelete: SetNull)
+  creatorId   String
+  creator     User      @relation("creator", fields: [creatorId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  recordId  String
+  record    Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  kind      String
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model List {
+  id        String      @id @default(cuid())
+  name      String
+  objectId  String
+  object    ObjectType  @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  entries   ListEntry[]
+}
+
+model ListEntry {
+  id        String   @id @default(cuid())
+  listId    String
+  list      List     @relation(fields: [listId], references: [id], onDelete: Cascade)
+  recordId  String
+  record    Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([listId, recordId])
+}
